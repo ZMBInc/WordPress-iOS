@@ -1,5 +1,5 @@
 /// View Controller for login-specific screens
-class LoginViewController: NUXViewController, SigninWPComSyncHandler, LoginFacadeDelegate {
+class LoginViewController: NUXViewController, LoginFacadeDelegate {
     @IBOutlet var instructionLabel: UILabel?
     @objc var errorToPresent: Error?
     var restrictToWPCom = false
@@ -9,6 +9,10 @@ class LoginViewController: NUXViewController, SigninWPComSyncHandler, LoginFacad
         facade.delegate = self
         return facade
     }()
+
+    var isJetpackLogin: Bool {
+        return loginFields.meta.jetpackLogin
+    }
 
     // MARK: Lifecycle Methods
 
@@ -54,7 +58,7 @@ class LoginViewController: NUXViewController, SigninWPComSyncHandler, LoginFacad
     }
 
     fileprivate func shouldShowEpilogue() -> Bool {
-        if !isJetpackLogin() {
+        if !isJetpackLogin {
             return true
         }
         let context = ContextManager.sharedInstance().mainContext
@@ -126,7 +130,7 @@ class LoginViewController: NUXViewController, SigninWPComSyncHandler, LoginFacad
 
     // MARK: SigninWPComSyncHandler methods
     dynamic func finishedLogin(withUsername username: String, authToken: String, requiredMultifactorCode: Bool) {
-        syncWPCom(username, authToken: authToken, requiredMultifactor: requiredMultifactorCode)
+        syncWPCom(username: username, authToken: authToken, requiredMultifactor: requiredMultifactorCode)
         guard let service = loginFields.meta.socialService, service == SocialServiceName.google,
             let token = loginFields.meta.socialServiceIDToken else {
                 return
@@ -148,10 +152,6 @@ class LoginViewController: NUXViewController, SigninWPComSyncHandler, LoginFacad
             // If/when we add support for manually connecting/disconnecting services
             // we can revisit.
         })
-    }
-
-    func isJetpackLogin() -> Bool {
-        return loginFields.meta.jetpackLogin
     }
 
     func configureStatusLabel(_ message: String) {
@@ -179,10 +179,64 @@ class LoginViewController: NUXViewController, SigninWPComSyncHandler, LoginFacad
         WordPressAuthenticator.post(event: .twoFactorCodeRequested)
         self.performSegue(withIdentifier: .show2FA, sender: self)
     }
+}
 
-    // Update safari stored credentials. Call after a successful sign in.
+
+// MARK: - Sync Helpers
+//
+extension LoginViewController {
+
     ///
-    func updateSafariCredentialsIfNeeded() {
+    ///
+    func syncWPCom(username: String, authToken: String, requiredMultifactor: Bool) {
         SafariCredentialsService.updateSafariCredentialsIfNeeded(with: loginFields)
+
+        configureStatusLabel(NSLocalizedString("Getting account information", comment: "Alerts the user that wpcom account information is being retrieved."))
+
+        let service = SigninWordPressComService()
+        service.syncWPCom(username: username, authToken: authToken, isJetpackLogin: isJetpackLogin, onSuccess: { [weak self] in
+            self?.didSyncWordPressCom(requiredMultifactor: requiredMultifactor)
+            self?.resetStatusAndDismiss()
+
+        }, onFailure: { [weak self] error in
+            self?.failedSyncWordPressCom(with: error)
+            self?.resetStatusAndDismiss()
+        })
+    }
+
+    ///
+    ///
+    private func didSyncWordPressCom(requiredMultifactor: Bool) {
+        /// HACK: An alternative notification to LoginFinished. Observe this instead of `WPSigninDidFinishNotification` for Jetpack logins.
+        /// When WPTabViewController no longer destroy's and rebuilds the view hierarchy this alternate notification can be removed.
+        ///
+        let notification = self.isJetpackLogin ? .wordpressLoginFinishedJetpackLogin : Foundation.Notification.Name(rawValue: WordPressAuthenticator.WPSigninDidFinishNotification)
+//        NotificationCenter.default.post(name: notification, object: account)
+
+        /// Tracker
+        ///
+        let properties = [
+            "multifactor": requiredMultifactor.description,
+            "dotcom_user": true.description
+        ]
+
+        WordPressAuthenticator.post(event: .signedIn(properties: properties))
+    }
+
+    ///
+    ///
+    private func failedSyncWordPressCom(with error: Error) {
+        /// At this point the user is authed and there is a valid account in core data. Make a note of the error and just dismiss
+        /// the vc. There might be some wonkiness due to missing data (blogs, account info) but this will eventually resync.
+        ///
+        DDLogError("Error while syncing wpcom account and/or blog details after authentiating. \(String(describing: error))")
+    }
+
+    ///
+    ///
+    private func resetStatusAndDismiss() {
+        self.configureStatusLabel("")
+        self.configureViewLoading(false)
+        self.dismiss()
     }
 }
