@@ -149,10 +149,10 @@ NSString * const WPAccountEmailAndDefaultBlogUpdatedNotification = @"WPAccountEm
 
     if (defaultAccount) {
         // Remove the current unrelated account.
-        [accountService removeDefaultWordPressComAccount];
+        [self removeDefaultWordPressComAccount];
     }
 
-    [accountService setDefaultWordPressComAccount:account];
+    [self setDefaultWordPressComAccount:account];
 }
 
 - (BOOL)isDefaultWordPressComAccount:(WPAccount *)account {
