@@ -43,6 +43,16 @@ extern NSNotificationName const WPAccountEmailAndDefaultBlogUpdatedNotification;
 - (void)removeDefaultWordPressComAccount;
 
 /**
+ Updates / Inserts the default WordPress.com account:
+    -  If there was no previous WordPress.com account, the specified account will be set as the main one.
+    -  If there was a previous Default WordPress.com, the former will be removed, and the new one will be setup.
+
+ @param account The acount to be set as default for WordPress.com
+
+ */
+- (void)updateDefaultWordPressComAccount:(WPAccount *)account;
+
+/**
  Returns if the given account is the default WordPress.com account.
  */
 - (BOOL)isDefaultWordPressComAccount:(WPAccount *)account;

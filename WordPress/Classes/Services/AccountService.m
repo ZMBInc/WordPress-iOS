@@ -135,6 +135,26 @@ NSString * const WPAccountEmailAndDefaultBlogUpdatedNotification = @"WPAccountEm
     [[NSNotificationCenter defaultCenter] postNotificationName:WPAccountDefaultWordPressComAccountChangedNotification object:nil];
 }
 
+/**
+ This method works as an Upsert: If there was no previous WordPress.com account, the specified account will be set as the main one.
+ Otherwise, previous Default WordPress.com account will be removed, and the new one will be setup.
+ */
+- (void)updateDefaultWordPressComAccount:(WPAccount *)account
+{
+    WPAccount *defaultAccount = [self defaultWordPressComAccount];
+    if ([defaultAccount isEqual:account]) {
+        // No update needed.
+        return;
+    }
+
+    if (defaultAccount) {
+        // Remove the current unrelated account.
+        [accountService removeDefaultWordPressComAccount];
+    }
+
+    [accountService setDefaultWordPressComAccount:account];
+}
+
 - (BOOL)isDefaultWordPressComAccount:(WPAccount *)account {
     NSString *uuid = [[NSUserDefaults standardUserDefaults] stringForKey:DefaultDotcomAccountUUIDDefaultsKey];
     if (uuid.length == 0) {
